@@ -99,6 +99,61 @@ int main()
         check (r.finite, "finite at other sample rates");
     }
 
+    // --- the diode clipper must match a high-precision (bisection) solution of the same equation
+    for (int clip = 0; clip < 3; ++clip)
+    {
+        const auto d = lifepedal::diodeFor (clip);
+        double worst = 0.0;
+        for (double x = -20.0; x <= 20.0; x += 0.0137)
+        {
+            const double ax = std::fabs (x);
+            double lo = 0.0, hi = ax;
+            for (int i = 0; i < 200; ++i)
+            {
+                const double y = 0.5 * (lo + hi);
+                const double g = (ax - y) / d.R - d.Is * (std::exp (std::min (y / d.nVt, 40.0)) - std::exp (std::min (-y / d.nVt, 40.0)));
+                if (g > 0.0) lo = y; else hi = y;
+            }
+            worst = std::max (worst, std::fabs ((double) lifepedal::diodeClip ((float) x, d) - std::copysign (0.5 * (lo + hi), x)));
+        }
+        if (worst > 1.0e-3)
+        {
+            std::printf ("diode clipper clip=%d: max error %.6f V\n", clip, worst);
+            check (false, "diode clipper matches the reference solution within 1 mV");
+        }
+    }
+
+    // --- periodicity: 375 Hz at 48 kHz repeats every 128 samples; noise or limit cycles would break that
+    for (int clip = 0; clip < 3; ++clip)
+        for (float dist : { 0.3f, 1.0f })
+            for (float oct : { 0.0f, 1.0f })
+                for (double a : { 0.02, 0.5 })
+                {
+                    lifepedal::Params q; q.clip = clip; q.distortion = dist; q.octave = oct;
+                    lifepedal::Engine eng; eng.prepare (48000.0);
+                    const int N = 96000, block = 512;
+                    juce::AudioBuffer<float> buf (2, block);
+                    std::vector<float> y;
+                    for (int pos = 0; pos < N; pos += block)
+                    {
+                        for (int i = 0; i < block; ++i)
+                        {
+                            const float v = (float) (a * std::sin (2.0 * M_PI * 375.0 * (pos + i) / 48000.0));
+                            buf.setSample (0, i, v); buf.setSample (1, i, v);
+                        }
+                        eng.process (buf, q);
+                        for (int i = 0; i < block; ++i) y.push_back (buf.getSample (0, i));
+                    }
+                    double e = 0, s = 0;
+                    for (int i = 64000; i < N; ++i) { const double dd = y[(size_t) i] - y[(size_t) i - 128]; e += dd * dd; s += (double) y[(size_t) i] * y[(size_t) i]; }
+                    const double res = s > 1e-12 ? std::sqrt (e / s) : 0.0;
+                    if (res > 1.0e-3)
+                    {
+                        std::printf ("periodicity clip=%d dist=%.1f oct=%.1f amp=%.2f: residual %.2e\n", clip, dist, oct, a, res);
+                        check (false, "output is periodic for a periodic input (no noise or limit cycles)");
+                    }
+                }
+
     std::printf (failures == 0 ? "\nALL CHECKS PASSED\n" : "\n%d CHECK(S) FAILED\n", failures);
     return failures;
 }

@@ -43,3 +43,6 @@ No compiler? Push this folder to a GitHub repository: the included workflow
 Optional offline DSP test: `cmake -S . -B build -DLIFEPEDAL_BUILD_TESTS=ON && cmake --build build --target dsp_test && ./build/dsp_test`
 
 JUCE is used under its AGPLv3/commercial licensing: if you distribute the plugin, the AGPL terms apply.
+
+## Changes
+- 1.0.1: the diode clipper is now solved to convergence (previously 3 fixed iterations, which left up to about 10 mV of error in the LED setting). Added automated checks against a reference solution and a periodicity check.

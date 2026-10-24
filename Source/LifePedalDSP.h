@@ -70,13 +70,16 @@ inline float diodeClip (float x, const DiodeModel& d)
     const double ax = std::fabs ((double) x);
     double y = std::min (ax, d.nVt * std::asinh (ax / (2.0 * d.Is * d.R)));
 
-    for (int i = 0; i < 3; ++i)
+    // iterate to convergence (a fixed small count is not enough for the LED setting)
+    for (int i = 0; i < 20; ++i)
     {
         const double e  = std::exp (std::min (y / d.nVt, 40.0));
         const double ei = 1.0 / e;
         const double g  = (ax - y) / d.R - d.Is * (e - ei);
         const double gp = -1.0 / d.R - d.Is / d.nVt * (e + ei);
-        y -= g / gp;
+        const double dy = g / gp;
+        y = std::max (0.0, y - dy);
+        if (std::fabs (dy) < 1.0e-9) break;
     }
     return (float) std::copysign (y, (double) x);
 }
